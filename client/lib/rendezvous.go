@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/turbotunnel"
+
 	"github.com/pion/webrtc/v4"
 	utls "github.com/refraction-networking/utls"
 
@@ -249,8 +251,9 @@ type WebRTCDialer struct {
 	webrtcConfig *webrtc.Configuration
 	max          int
 
-	eventLogger event.SnowflakeEventReceiver
-	proxy       *url.URL
+	eventLogger  event.SnowflakeEventReceiver
+	proxy        *url.URL
+	connectionID turbotunnel.ClientID
 }
 
 // Deprecated: Use NewWebRTCDialerWithNatPolicyAndEventsAndProxy instead
@@ -281,7 +284,6 @@ func NewWebRTCDialerWithEventsAndProxy(broker *BrokerChannel, iceServers []webrt
 	)
 }
 
-// NewWebRTCDialerWithNatPolicyAndEventsAndProxy constructs a new WebRTCDialer.
 func NewWebRTCDialerWithNatPolicyAndEventsAndProxy(
 	broker *BrokerChannel,
 	natPolicy *NATPolicy,
@@ -289,6 +291,27 @@ func NewWebRTCDialerWithNatPolicyAndEventsAndProxy(
 	max int,
 	eventLogger event.SnowflakeEventReceiver,
 	proxy *url.URL,
+) *WebRTCDialer {
+	return NewWebRTCDialerWithNatPolicyAndEventsAndProxyAndClientID(
+		broker,
+		natPolicy,
+		iceServers,
+		max,
+		eventLogger,
+		proxy,
+		turbotunnel.NewClientID(),
+	)
+}
+
+// NewWebRTCDialerWithNatPolicyAndEventsAndProxy constructs a new WebRTCDialer.
+func NewWebRTCDialerWithNatPolicyAndEventsAndProxyAndClientID(
+	broker *BrokerChannel,
+	natPolicy *NATPolicy,
+	iceServers []webrtc.ICEServer,
+	max int,
+	eventLogger event.SnowflakeEventReceiver,
+	proxy *url.URL,
+	clientID turbotunnel.ClientID,
 ) *WebRTCDialer {
 	config := webrtc.Configuration{
 		ICEServers: iceServers,
@@ -300,8 +323,9 @@ func NewWebRTCDialerWithNatPolicyAndEventsAndProxy(
 		webrtcConfig:  &config,
 		max:           max,
 
-		eventLogger: eventLogger,
-		proxy:       proxy,
+		eventLogger:  eventLogger,
+		proxy:        proxy,
+		connectionID: clientID,
 	}
 }
 
@@ -309,9 +333,7 @@ func NewWebRTCDialerWithNatPolicyAndEventsAndProxy(
 func (w WebRTCDialer) Catch() (*WebRTCPeer, error) {
 	// TODO: [#25591] Fetch ICE server information from Broker.
 	// TODO: [#25596] Consider TURN servers here too.
-	return NewWebRTCPeerWithNatPolicyAndEventsAndProxy(
-		w.webrtcConfig, w.BrokerChannel, w.natPolicy, w.eventLogger, w.proxy,
-	)
+	return NewWebRTCPeerWithEventsAndProxy(w.webrtcConfig, w.BrokerChannel, w.eventLogger, w.proxy)
 }
 
 // GetMax returns the maximum number of snowflakes to collect.

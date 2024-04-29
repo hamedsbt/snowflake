@@ -78,6 +78,8 @@ type Transport struct {
 	// EventDispatcher is the event bus for snowflake events.
 	// When an important event happens, it will be distributed here.
 	eventDispatcher event.SnowflakeEventDispatcher
+
+	clientID turbotunnel.ClientID
 }
 
 // ClientConfig defines how the SnowflakeClient will connect to the broker and Snowflake proxies.
@@ -164,7 +166,11 @@ func NewSnowflakeClient(config ClientConfig) (*Transport, error) {
 		max = config.Max
 	}
 	eventsLogger := event.NewSnowflakeEventDispatcher()
-	transport := &Transport{dialer: NewWebRTCDialerWithNatPolicyAndEventsAndProxy(broker, natPolicy, iceServers, max, eventsLogger, config.CommunicationProxy), eventDispatcher: eventsLogger}
+	clientID := turbotunnel.NewClientID()
+	transport := &Transport{
+		dialer:          NewWebRTCDialerWithNatPolicyAndEventsAndProxy(broker, natPolicy, iceServers, max, eventsLogger, config.CommunicationProxy),
+		eventDispatcher: eventsLogger, clientID: clientID,
+	}
 
 	return transport, nil
 }
@@ -198,7 +204,7 @@ func (t *Transport) Dial() (net.Conn, error) {
 
 	// Create a new smux session
 	log.Printf("---- SnowflakeConn: starting a new session ---")
-	pconn, sess, err := newSession(snowflakes)
+	pconn, sess, err := newSession(snowflakes, t.clientID)
 	if err != nil {
 		return nil, err
 	}
@@ -324,8 +330,11 @@ func parseIceServers(addresses []string) []webrtc.ICEServer {
 // newSession returns a new smux.Session and the net.PacketConn it is running
 // over. The net.PacketConn successively connects through Snowflake proxies
 // pulled from snowflakes.
-func newSession(snowflakes SnowflakeCollector) (net.PacketConn, *smux.Session, error) {
+func newSession(snowflakes SnowflakeCollector, clientIDCandid turbotunnel.ClientID) (net.PacketConn, *smux.Session, error) {
 	clientID := turbotunnel.NewClientID()
+	if clientIDCandid != (turbotunnel.ClientID{}) {
+		clientID = clientIDCandid
+	}
 
 	// We build a persistent KCP session on a sequence of ephemeral WebRTC
 	// connections. This dialContext tells RedialPacketConn how to get a new
@@ -342,9 +351,8 @@ func newSession(snowflakes SnowflakeCollector) (net.PacketConn, *smux.Session, e
 		log.Println("---- Handler: snowflake assigned ----")
 		log.Printf("activeTransportMode = %c \n", conn.activeTransportMode)
 		if conn.activeTransportMode == 'u' {
-			packetIDConn := newPacketClientIDConn(clientID, conn)
 			packetConnWrapper := &packetConnWrapper{
-				ReadWriter: packetIDConn,
+				ReadWriter: conn,
 				remoteAddr: dummyAddr{},
 				localAddr:  dummyAddr{},
 			}
