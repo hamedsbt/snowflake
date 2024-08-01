@@ -47,7 +47,7 @@ type WebRTCPeer struct {
 	proxy        *url.URL
 
 	activeTransportMode byte
-	connectionID        turbotunnel.ClientID
+	clientID            turbotunnel.ClientID
 }
 
 // Deprecated: Use NewWebRTCPeerWithNatPolicyAndEventsAndProxy Instead.
@@ -99,7 +99,7 @@ func NewWebRTCPeerWithNatPolicyAndEventsAndProxy(
 // The creation of the peer handles the signaling to the Snowflake broker, including
 // the exchange of SDP information, the creation of a PeerConnection, and the establishment
 // of a DataChannel to the Snowflake proxy.
-// connectionID is the hinted ID for the connection.
+// clientID is the hinted ID for the connection.
 func NewWebRTCPeerWithNatPolicyAndEventsProxyAndClientID(config *webrtc.Configuration,
 	broker *BrokerChannel, natPolicy *NATPolicy, eventsLogger event.SnowflakeEventReceiver, proxy *url.URL,
 	clientID turbotunnel.ClientID,
@@ -126,7 +126,7 @@ func NewWebRTCPeerWithNatPolicyAndEventsProxyAndClientID(config *webrtc.Configur
 
 	connection.eventsLogger = eventsLogger
 	connection.proxy = proxy
-	connection.connectionID = clientID
+	connection.clientID = clientID
 
 	err := connection.connect(config, broker, natPolicy)
 	if err != nil {
@@ -325,7 +325,7 @@ func (c *WebRTCPeer) preparePeerConnection(
 		maxRetransmissionVal := uint16(0)
 		maxRetransmission = &maxRetransmissionVal
 	}
-	protocol := fmt.Sprintf("%c %s", c.activeTransportMode, c.connectionID.String())
+	protocol := fmt.Sprintf("%c %s", c.activeTransportMode, c.clientID.String())
 	dataChannelOptions := &webrtc.DataChannelInit{
 		Ordered:        &ordered,
 		Protocol:       &protocol,

@@ -250,9 +250,9 @@ type WebRTCDialer struct {
 	webrtcConfig *webrtc.Configuration
 	max          int
 
-	eventLogger  event.SnowflakeEventReceiver
-	proxy        *url.URL
-	connectionID turbotunnel.ClientID
+	eventLogger event.SnowflakeEventReceiver
+	proxy       *url.URL
+	clientID    turbotunnel.ClientID
 }
 
 // Deprecated: Use NewWebRTCDialerWithNatPolicyAndEventsAndProxy instead
@@ -322,9 +322,9 @@ func NewWebRTCDialerWithNatPolicyAndEventsAndProxyAndClientID(
 		webrtcConfig:  &config,
 		max:           max,
 
-		eventLogger:  eventLogger,
-		proxy:        proxy,
-		connectionID: clientID,
+		eventLogger: eventLogger,
+		proxy:       proxy,
+		clientID:    clientID,
 	}
 }
 
@@ -332,7 +332,7 @@ func NewWebRTCDialerWithNatPolicyAndEventsAndProxyAndClientID(
 func (w WebRTCDialer) Catch() (*WebRTCPeer, error) {
 	// TODO: [#25591] Fetch ICE server information from Broker.
 	// TODO: [#25596] Consider TURN servers here too.
-	return NewWebRTCPeerWithEventsAndProxy(w.webrtcConfig, w.BrokerChannel, w.eventLogger, w.proxy)
+	return NewWebRTCPeerWithNatPolicyAndEventsProxyAndClientID(w.webrtcConfig, w.BrokerChannel, w.natPolicy, w.eventLogger, w.proxy, w.clientID)
 }
 
 // GetMax returns the maximum number of snowflakes to collect.
