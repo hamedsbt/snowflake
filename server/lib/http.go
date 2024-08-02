@@ -1,7 +1,6 @@
 package snowflake_server
 
 import (
-	"bufio"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/encapsulation"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/turbotunnel"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/websocketconn"
 )
@@ -32,7 +30,7 @@ const requestTimeout = 10 * time.Second
 const clientMapTimeout = 1 * time.Minute
 
 // How big to make the map of ClientIDs to IP addresses. The map is used in
-// turbotunnelMode to store a reasonable IP address for a client session that
+// turboTunnelUDPLikeMode to store a reasonable IP address for a client session that
 // may outlive any single WebSocket connection.
 const clientIDAddrMapCapacity = 98304
 
@@ -117,14 +115,12 @@ func (handler *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// turbotunnelMode handles clients that sent turbotunnel.Token at the start of
-// their stream. These clients expect to send and receive encapsulated packets,
-// with a long-lived session identified by ClientID.
-func (handler *httpHandler) turbotunnelMode(conn net.Conn, addr net.Addr) error {
-	// Read the ClientID prefix. Every packet encapsulated in this WebSocket
-	// connection pertains to the same ClientID.
-	var clientID turbotunnel.ClientID
-	_, err := io.ReadFull(conn, clientID[:])
+func (handler *httpHandler) turboTunnelUDPLikeMode(conn net.Conn, addr net.Addr, protocol string) error {
+	// Read the ClientID from the WebRTC data channel protocol string. Every
+	// packet received on this WebSocket connection pertains to the same
+	// ClientID.
+	clientID := turbotunnel.ClientID{}
+	_, err := hex.Decode(clientID[:], []byte(protocol))
 	if err != nil {
 		return fmt.Errorf("reading ClientID: %w", err)
 	}
@@ -146,8 +142,8 @@ func (handler *httpHandler) turbotunnelMode(conn net.Conn, addr net.Addr) error 
 	wg.Add(2)
 	done := make(chan struct{})
 
-	// The remainder of the WebSocket stream consists of encapsulated
-	// packets. We read them one by one and feed them into the
+	// The remainder of the WebSocket stream consists of packets, one packet
+	// per WebSocket message. We read them one by one and feed them into the
 	// QueuePacketConn on which kcp.ServeConn was set up, which eventually
 	// leads to KCP-level sessions in the acceptSessions function.
 	go func() {
@@ -155,11 +151,9 @@ func (handler *httpHandler) turbotunnelMode(conn net.Conn, addr net.Addr) error 
 		defer close(done) // Signal the write loop to finish
 		var p [2048]byte
 		for {
-			n, err := encapsulation.ReadData(conn, p[:])
-			if err == io.ErrShortBuffer {
-				err = nil
-			}
+			n, err := conn.Read(p[:])
 			if err != nil {
+				log.Println(err)
 				return
 			}
 			pconn.QueueIncoming(p[:n], clientID)
@@ -168,65 +162,6 @@ func (handler *httpHandler) turbotunnelMode(conn net.Conn, addr net.Addr) error 
 
 	// At the same time, grab packets addressed to this ClientID and
 	// encapsulate them into the downstream.
-	go func() {
-		defer wg.Done()
-		defer conn.Close() // Signal the read loop to finish
-
-		// Buffer encapsulation.WriteData operations to keep length
-		// prefixes in the same send as the data that follows.
-		bw := bufio.NewWriter(conn)
-		for {
-			select {
-			case <-done:
-				return
-			case p, ok := <-pconn.OutgoingQueue(clientID):
-				if !ok {
-					return
-				}
-				_, err := encapsulation.WriteData(bw, p)
-				pconn.Restore(p)
-				if err == nil {
-					err = bw.Flush()
-				}
-				if err != nil {
-					return
-				}
-			}
-		}
-	}()
-
-	wg.Wait()
-
-	return nil
-}
-
-func (handler *httpHandler) turboTunnelUDPLikeMode(conn net.Conn, addr net.Addr, protocol string) error {
-	var packet [1600]byte
-
-	clientID := turbotunnel.ClientID{}
-	_, err := hex.Decode(clientID[:], []byte(protocol))
-	if err != nil {
-		return fmt.Errorf("reading ClientID: %v", err)
-	}
-
-	clientIDAddrMap.Set(clientID, addr)
-
-	pconn := handler.lookupPacketConn(clientID)
-	var wg sync.WaitGroup
-	wg.Add(2)
-	done := make(chan struct{})
-	go func() {
-		defer wg.Done()
-		defer close(done) // Signal the write loop to finish
-		for {
-			n, err := conn.Read(packet[:])
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			pconn.QueueIncoming(packet[:n], clientID)
-		}
-	}()
 	go func() {
 		defer wg.Done()
 		defer conn.Close() // Signal the read loop to finish
@@ -249,6 +184,7 @@ func (handler *httpHandler) turboTunnelUDPLikeMode(conn net.Conn, addr net.Addr,
 	}()
 
 	wg.Wait()
+
 	return nil
 }
 
