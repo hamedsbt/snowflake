@@ -331,11 +331,6 @@ func parseIceServers(addresses []string) []webrtc.ICEServer {
 // over. The net.PacketConn successively connects through Snowflake proxies
 // pulled from snowflakes.
 func newSession(snowflakes SnowflakeCollector, clientIDCandid turbotunnel.ClientID) (net.PacketConn, *smux.Session, error) {
-	clientID := turbotunnel.NewClientID()
-	if clientIDCandid != (turbotunnel.ClientID{}) {
-		clientID = clientIDCandid
-	}
-
 	// We build a persistent KCP session on a sequence of ephemeral WebRTC
 	// connections. This dialContext tells RedialPacketConn how to get a new
 	// WebRTC connection when the previous one dies. Inside each WebRTC
@@ -349,26 +344,12 @@ func newSession(snowflakes SnowflakeCollector, clientIDCandid turbotunnel.Client
 			return nil, errors.New("handler: Received invalid Snowflake")
 		}
 		log.Println("---- Handler: snowflake assigned ----")
-		log.Printf("activeTransportMode = %c \n", conn.activeTransportMode)
-		if conn.activeTransportMode == 'u' {
-			packetConnWrapper := &packetConnWrapper{
-				ReadWriter: conn,
-				remoteAddr: dummyAddr{},
-				localAddr:  dummyAddr{},
-			}
-			return packetConnWrapper, nil
+		packetConnWrapper := &packetConnWrapper{
+			ReadWriter: conn,
+			remoteAddr: dummyAddr{},
+			localAddr:  dummyAddr{},
 		}
-		// Send the magic Turbo Tunnel token.
-		_, err := conn.Write(turbotunnel.Token[:])
-		if err != nil {
-			return nil, err
-		}
-		// Send ClientID prefix.
-		_, err = conn.Write(clientID[:])
-		if err != nil {
-			return nil, err
-		}
-		return newEncapsulationPacketConn(dummyAddr{}, dummyAddr{}, conn), nil
+		return packetConnWrapper, nil
 	}
 	pconn := turbotunnel.NewRedialPacketConn(dummyAddr{}, dummyAddr{}, dialContext)
 

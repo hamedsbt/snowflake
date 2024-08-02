@@ -2,7 +2,6 @@ package snowflake_server
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -13,7 +12,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -112,45 +110,8 @@ func (handler *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	addr := clientAddr(clientIPParam)
 	protocol := r.URL.Query().Get("protocol")
 
-	clientTransport := "t"
-
-	if protocol != "" {
-		clientTransport = fmt.Sprintf("%c", protocol[0])
-	}
-
-	if clientTransport == "u" {
-		err = handler.turboTunnelUDPLikeMode(conn, addr, protocol)
-		if err != nil && err != io.EOF {
-			log.Println(err)
-			return
-		}
-		return
-	}
-
-	var token [len(turbotunnel.Token)]byte
-	_, err = io.ReadFull(conn, token[:])
-	if err != nil {
-		// Don't bother logging EOF: that happens with an unused
-		// connection, which clients make frequently as they maintain a
-		// pool of proxies.
-		if err != io.EOF {
-			log.Printf("reading token: %v", err)
-		}
-		return
-	}
-
-	switch {
-	case bytes.Equal(token[:], turbotunnel.Token[:]):
-		err = handler.turbotunnelMode(conn, addr)
-	default:
-		// We didn't find a matching token, which means that we are
-		// dealing with a client that doesn't know about such things.
-		// Close the conn as we no longer support the old
-		// one-session-per-WebSocket mode.
-		log.Println("Received unsupported oneshot connection")
-		return
-	}
-	if err != nil {
+	err = handler.turboTunnelUDPLikeMode(conn, addr, protocol)
+	if err != nil && err != io.EOF {
 		log.Println(err)
 		return
 	}
@@ -243,11 +204,7 @@ func (handler *httpHandler) turboTunnelUDPLikeMode(conn net.Conn, addr net.Addr,
 	var packet [1600]byte
 
 	clientID := turbotunnel.ClientID{}
-	compoments := strings.Split(protocol, " ")
-	if len(compoments) != 2 {
-		return fmt.Errorf("invalid protocol: %s", protocol)
-	}
-	_, err := hex.Decode(clientID[:], []byte(compoments[1]))
+	_, err := hex.Decode(clientID[:], []byte(protocol))
 	if err != nil {
 		return fmt.Errorf("reading ClientID: %v", err)
 	}
