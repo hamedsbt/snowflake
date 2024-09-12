@@ -291,7 +291,7 @@ func NewWebRTCDialerWithNatPolicyAndEventsAndProxy(
 	eventLogger event.SnowflakeEventReceiver,
 	proxy *url.URL,
 ) *WebRTCDialer {
-	return NewWebRTCDialerWithNatPolicyAndEventsAndProxyAndClientID(
+	return newWebRTCDialerWithNatPolicyAndEventsAndProxyAndClientID(
 		broker,
 		natPolicy,
 		iceServers,
@@ -303,7 +303,7 @@ func NewWebRTCDialerWithNatPolicyAndEventsAndProxy(
 }
 
 // NewWebRTCDialerWithNatPolicyAndEventsAndProxy constructs a new WebRTCDialer.
-func NewWebRTCDialerWithNatPolicyAndEventsAndProxyAndClientID(
+func newWebRTCDialerWithNatPolicyAndEventsAndProxyAndClientID(
 	broker *BrokerChannel,
 	natPolicy *NATPolicy,
 	iceServers []webrtc.ICEServer,

@@ -164,9 +164,8 @@ func NewSnowflakeClient(config ClientConfig) (*Transport, error) {
 		max = config.Max
 	}
 	eventsLogger := event.NewSnowflakeEventDispatcher()
-	clientID := turbotunnel.NewClientID()
 	transport := &Transport{
-		dialer:          NewWebRTCDialerWithNatPolicyAndEventsAndProxyAndClientID(broker, natPolicy, iceServers, max, eventsLogger, config.CommunicationProxy, clientID),
+		dialer:          NewWebRTCDialerWithNatPolicyAndEventsAndProxy(broker, natPolicy, iceServers, max, eventsLogger, config.CommunicationProxy),
 		eventDispatcher: eventsLogger,
 	}
 
