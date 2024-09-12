@@ -51,7 +51,7 @@ func (pcw *packetConnWrapper) WriteTo(p []byte, addr net.Addr) (n int, err error
 }
 
 func (pcw *packetConnWrapper) Close() error {
-	return pcw.ReadWriteCloser.Close()
+	return pcw.ReadWriteCloserPreservesBoundary.Close()
 }
 
 func (pcw *packetConnWrapper) LocalAddr() net.Addr {
