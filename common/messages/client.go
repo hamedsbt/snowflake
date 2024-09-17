@@ -152,7 +152,7 @@ func DecodeClientPollResponse(data []byte) (*ClientPollResponse, error) {
 }
 
 type ClientConnectionMetadata struct {
-	ClientID string `json:"client_id"`
+	ClientID []byte `json:"client_id"`
 }
 
 func (meta *ClientConnectionMetadata) EncodeConnectionMetadata() (string, error) {

@@ -5,8 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
-	"encoding/hex"
-	"fmt"
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/messages"
 	"io"
 	"log"
 	"net"
@@ -120,10 +119,11 @@ func (handler *httpHandler) turboTunnelUDPLikeMode(conn net.Conn, addr net.Addr,
 	// packet received on this WebSocket connection pertains to the same
 	// ClientID.
 	clientID := turbotunnel.ClientID{}
-	_, err := hex.Decode(clientID[:], []byte(protocol))
+	metaData, err := messages.DecodeConnectionMetadata(protocol)
 	if err != nil {
-		return fmt.Errorf("reading ClientID: %w", err)
+		return err
 	}
+	copy(clientID[:], metaData.ClientID[:])
 
 	// Store a short-term mapping from the ClientID to the client IP
 	// address attached to this WebSocket connection. tor will want us to

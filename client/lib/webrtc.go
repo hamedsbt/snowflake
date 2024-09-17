@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"fmt"
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/messages"
 	"io"
 	"log"
 	"net"
@@ -318,7 +318,12 @@ func (c *WebRTCPeer) preparePeerConnection(
 	}
 	ordered := false
 	var maxRetransmission uint16 = 0
-	protocol := fmt.Sprintf("%s", c.clientID.String())
+	connectionMetadata := messages.ClientConnectionMetadata{ClientID: c.clientID[:]}
+	encodedMetadata, err := connectionMetadata.EncodeConnectionMetadata()
+	if err != nil {
+		return err
+	}
+	protocol := encodedMetadata
 	dataChannelOptions := &webrtc.DataChannelInit{
 		Ordered:        &ordered,
 		Protocol:       &protocol,
