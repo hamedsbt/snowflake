@@ -706,7 +706,9 @@ func checkIsRelayURLAcceptable(
 			if !isRemoteAddress(ip) {
 				return fmt.Errorf("rejected Relay URL: private IPs are not allowed")
 			}
-		}
+		} else {
+            // move net.LookupIP(hostname) and isRemoteAddress checks here
+        }
 	}
 	if !allowNonTLSRelay && parsedRelayURL.Scheme != "wss" {
 		return fmt.Errorf("rejected Relay URL protocol: non-TLS not allowed")
