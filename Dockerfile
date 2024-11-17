@@ -1,12 +1,11 @@
 FROM docker.io/library/golang:latest AS build
 
 
-COPY go.mod /app/go.mod
-COPY go.sum /app/go.sum
-WORKDIR /app/
+WORKDIR /app
+COPY go.mod go.sum ./
 RUN go mod download
 
-COPY . /app
+COPY . ./
 
 WORKDIR /app/proxy
 RUN CGO_ENABLED=0 go build -o proxy -ldflags '-extldflags "-static" -w -s'  .
