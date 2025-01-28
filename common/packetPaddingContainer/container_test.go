@@ -14,69 +14,69 @@ func TestPacketPaddingContainer(t *testing.T) {
 
 		Convey("When packing data with padding", func() {
 			data := []byte("testdata")
-			padding := 4
-			packedData := container.Pack(data, padding)
+			paddingLength := 4
+			packedData := container.Pack(data, paddingLength)
 
 			Convey("The packed data should have the correct length", func() {
-				expectedLength := len(data) + padding + 2
+				expectedLength := len(data) + paddingLength + 2
 				So(len(packedData), ShouldEqual, expectedLength)
 			})
 
 			Convey("When unpacking the packed data", func() {
-				unpackedData, unpackedPadding := container.Unpack(packedData)
+				unpackedData, unpackedPaddingLength := container.Unpack(packedData)
 
 				Convey("The unpacked data should match the original data", func() {
 					So(string(unpackedData), ShouldEqual, string(data))
 				})
 
-				Convey("The unpacked padding should match the original padding", func() {
-					So(unpackedPadding, ShouldEqual, padding)
+				Convey("The unpacked padding length should match the original padding length", func() {
+					So(unpackedPaddingLength, ShouldEqual, paddingLength)
 				})
 			})
 		})
 
 		Convey("When packing empty data with padding", func() {
 			data := []byte("")
-			padding := 4
-			packedData := container.Pack(data, padding)
+			paddingLength := 4
+			packedData := container.Pack(data, paddingLength)
 
 			Convey("The packed data should have the correct length", func() {
-				expectedLength := len(data) + padding + 2
+				expectedLength := len(data) + paddingLength + 2
 				So(len(packedData), ShouldEqual, expectedLength)
 			})
 
 			Convey("When unpacking the packed data", func() {
-				unpackedData, unpackedPadding := container.Unpack(packedData)
+				unpackedData, unpackedPaddingLength := container.Unpack(packedData)
 
 				Convey("The unpacked data should match the original data", func() {
 					So(string(unpackedData), ShouldEqual, string(data))
 				})
 
-				Convey("The unpacked padding should match the original padding", func() {
-					So(unpackedPadding, ShouldEqual, padding)
+				Convey("The unpacked padding length should match the original padding length", func() {
+					So(unpackedPaddingLength, ShouldEqual, paddingLength)
 				})
 			})
 		})
 
 		Convey("When packing data with zero padding", func() {
 			data := []byte("testdata")
-			padding := 0
-			packedData := container.Pack(data, padding)
+			paddingLength := 0
+			packedData := container.Pack(data, paddingLength)
 
 			Convey("The packed data should have the correct length", func() {
-				expectedLength := len(data) + padding + 2
+				expectedLength := len(data) + paddingLength + 2
 				So(len(packedData), ShouldEqual, expectedLength)
 			})
 
 			Convey("When unpacking the packed data", func() {
-				unpackedData, unpackedPadding := container.Unpack(packedData)
+				unpackedData, unpackedPaddingLength := container.Unpack(packedData)
 
 				Convey("The unpacked data should match the original data", func() {
 					So(string(unpackedData), ShouldEqual, string(data))
 				})
 
-				Convey("The unpacked padding should match the original padding", func() {
-					So(unpackedPadding, ShouldEqual, padding)
+				Convey("The unpacked padding length should match the original padding length", func() {
+					So(unpackedPaddingLength, ShouldEqual, paddingLength)
 				})
 			})
 		})

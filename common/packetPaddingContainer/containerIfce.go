@@ -19,7 +19,7 @@ type PacketPaddingContainer interface {
 	// len(data_OWNERSHIP_RELINQUISHED) + padding + 2
 	// @param data_OWNERSHIP_RELINQUISHED - The payload, this reference is consumed and should not be used after this call.
 	// @param padding - The number of padding bytes to add to the data.
-	Pack(data_OWNERSHIP_RELINQUISHED []byte, padding int) []byte
+	Pack(data_OWNERSHIP_RELINQUISHED []byte, paddingLength int) []byte
 
 	// Unpack extracts the data and padding from the given padded data. It
 	// returns the data and the number of padding bytes.
@@ -30,5 +30,5 @@ type PacketPaddingContainer interface {
 	// Pad returns a padding packet of padding length.
 	// If the padding length is less than 0, nil is returned.
 	// @param padding - The number of padding bytes to add to the data.
-	Pad(padding int) []byte
+	Pad(paddingLength int) []byte
 }
