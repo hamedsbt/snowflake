@@ -7,6 +7,17 @@ type ReadWriteCloserPreservesBoundary interface {
 	MessageBoundaryPreserved()
 }
 
+type messageBoundaryPreservedReadWriteCloser struct {
+	io.ReadWriteCloser
+}
+
+func (m *messageBoundaryPreservedReadWriteCloser) MessageBoundaryPreserved() {
+}
+
+func ConfirmsReadWriteCloserPreservesMessageBoundary(rwc io.ReadWriteCloser) ReadWriteCloserPreservesBoundary {
+	return &messageBoundaryPreservedReadWriteCloser{rwc}
+}
+
 type PaddableConnection interface {
 	ReadWriteCloserPreservesBoundary
 }

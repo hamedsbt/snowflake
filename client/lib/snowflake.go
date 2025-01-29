@@ -28,6 +28,7 @@ package snowflake_client
 import (
 	"context"
 	"errors"
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/packetpadding"
 	"log"
 	"math/rand"
 	"net"
@@ -342,7 +343,11 @@ func newSession(snowflakes SnowflakeCollector) (net.PacketConn, *smux.Session, e
 		}
 		log.Println("---- Handler: snowflake assigned ----")
 
-		packetConnWrapper := newPacketConnWrapper(dummyAddr{}, dummyAddr{}, ConfirmsReadWriteCloserPreservesMessageBoundary(conn))
+		packetConnWrapper := newPacketConnWrapper(dummyAddr{}, dummyAddr{},
+			packetpadding.NewPaddableConnection(
+				ConfirmsReadWriteCloserPreservesMessageBoundary(conn),
+				packetpadding.New()))
+
 		return packetConnWrapper, nil
 	}
 	pconn := turbotunnel.NewRedialPacketConn(dummyAddr{}, dummyAddr{}, dialContext)

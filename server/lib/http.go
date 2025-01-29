@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
-	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/messages"
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/packetpadding"
 	"io"
 	"log"
 	"net"
@@ -15,6 +15,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/messages"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/turbotunnel"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/websocketconn"
 )
@@ -142,6 +143,9 @@ func (handler *httpHandler) turboTunnelUDPLikeMode(conn net.Conn, addr net.Addr,
 	wg.Add(2)
 	done := make(chan struct{})
 
+	connPaddable := packetpadding.NewPaddableConnection(
+		packetpadding.ConfirmsReadWriteCloserPreservesMessageBoundary(conn), packetpadding.New())
+
 	// The remainder of the WebSocket stream consists of packets, one packet
 	// per WebSocket message. We read them one by one and feed them into the
 	// QueuePacketConn on which kcp.ServeConn was set up, which eventually
@@ -151,7 +155,7 @@ func (handler *httpHandler) turboTunnelUDPLikeMode(conn net.Conn, addr net.Addr,
 		defer close(done) // Signal the write loop to finish
 		var p [2048]byte
 		for {
-			n, err := conn.Read(p[:])
+			n, err := connPaddable.Read(p[:])
 			if err != nil {
 				log.Println(err)
 				return
@@ -173,7 +177,7 @@ func (handler *httpHandler) turboTunnelUDPLikeMode(conn net.Conn, addr net.Addr,
 				if !ok {
 					return
 				}
-				_, err := conn.Write(p)
+				_, err := connPaddable.Write(p)
 				pconn.Restore(p)
 				if err != nil {
 					log.Println(err)
