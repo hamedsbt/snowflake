@@ -151,6 +151,9 @@ func DecodeClientPollResponse(data []byte) (*ClientPollResponse, error) {
 	return &message, nil
 }
 
+// ClientConnectionMetadata is a struct that contains metadata about a snowflake connection between client and server
+// It will be sent from the client to the proxy in WebRTC data channel protocol string
+// The proxy will then send the metadata to the server in the protocol get parameter of the WebSocket connection
 type ClientConnectionMetadata struct {
 	ClientID []byte `json:"client_id"`
 }
