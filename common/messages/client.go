@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/fxamacker/cbor"
+
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/bridgefingerprint"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/nat"
 )
@@ -159,7 +161,7 @@ type ClientConnectionMetadata struct {
 }
 
 func (meta *ClientConnectionMetadata) EncodeConnectionMetadata() (string, error) {
-	jsonData, err := json.Marshal(meta)
+	jsonData, err := cbor.Marshal(meta, cbor.CanonicalEncOptions())
 	if err != nil {
 		return "", err
 	}
@@ -174,7 +176,7 @@ func DecodeConnectionMetadata(data string) (*ClientConnectionMetadata, error) {
 	}
 
 	var meta ClientConnectionMetadata
-	err = json.Unmarshal(decodedData, &meta)
+	err = cbor.Unmarshal(decodedData, &meta)
 	if err != nil {
 		return nil, err
 	}

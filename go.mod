@@ -47,6 +47,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/fxamacker/cbor v1.5.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gopherjs/gopherjs v1.17.2 // indirect
 	github.com/jtolds/gls v4.20.0+incompatible // indirect
@@ -77,6 +78,7 @@ require (
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/txthinking/runnergroup v0.0.0-20210608031112-152c7c4432bf // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
