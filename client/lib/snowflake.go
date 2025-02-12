@@ -32,6 +32,7 @@ import (
 	"math/rand"
 	"net"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ import (
 
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/event"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/nat"
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/packetpadding"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/turbotunnel"
 )
 
@@ -163,7 +165,10 @@ func NewSnowflakeClient(config ClientConfig) (*Transport, error) {
 		max = config.Max
 	}
 	eventsLogger := event.NewSnowflakeEventDispatcher()
-	transport := &Transport{dialer: NewWebRTCDialerWithNatPolicyAndEventsAndProxy(broker, natPolicy, iceServers, max, eventsLogger, config.CommunicationProxy), eventDispatcher: eventsLogger}
+	transport := &Transport{
+		dialer:          NewWebRTCDialerWithNatPolicyAndEventsAndProxy(broker, natPolicy, iceServers, max, eventsLogger, config.CommunicationProxy),
+		eventDispatcher: eventsLogger,
+	}
 
 	return transport, nil
 }
@@ -324,13 +329,11 @@ func parseIceServers(addresses []string) []webrtc.ICEServer {
 // over. The net.PacketConn successively connects through Snowflake proxies
 // pulled from snowflakes.
 func newSession(snowflakes SnowflakeCollector) (net.PacketConn, *smux.Session, error) {
-	clientID := turbotunnel.NewClientID()
-
 	// We build a persistent KCP session on a sequence of ephemeral WebRTC
 	// connections. This dialContext tells RedialPacketConn how to get a new
 	// WebRTC connection when the previous one dies. Inside each WebRTC
-	// connection, we use encapsulationPacketConn to encode packets into a
-	// stream.
+	// connection, KCP packets are sent and received, one-to-one, in data
+	// channel messages.
 	dialContext := func(ctx context.Context) (net.PacketConn, error) {
 		log.Printf("redialing on same connection")
 		// Obtain an available WebRTC remote. May block.
@@ -339,17 +342,12 @@ func newSession(snowflakes SnowflakeCollector) (net.PacketConn, *smux.Session, e
 			return nil, errors.New("handler: Received invalid Snowflake")
 		}
 		log.Println("---- Handler: snowflake assigned ----")
-		// Send the magic Turbo Tunnel token.
-		_, err := conn.Write(turbotunnel.Token[:])
-		if err != nil {
-			return nil, err
-		}
-		// Send ClientID prefix.
-		_, err = conn.Write(clientID[:])
-		if err != nil {
-			return nil, err
-		}
-		return newEncapsulationPacketConn(dummyAddr{}, dummyAddr{}, conn), nil
+
+		packetConnWrapper := newPacketConnWrapper(dummyAddr{}, dummyAddr{},
+			packetpadding.NewPaddableConnection(conn,
+				packetpadding.New()))
+
+		return packetConnWrapper, nil
 	}
 	pconn := turbotunnel.NewRedialPacketConn(dummyAddr{}, dummyAddr{}, dialContext)
 
@@ -375,6 +373,14 @@ func newSession(snowflakes SnowflakeCollector) (net.PacketConn, *smux.Session, e
 		0, // default resend
 		1, // nc=1 => congestion window off
 	)
+	if os.Getenv("SNOWFLAKE_TEST_KCP_FAST3MODE") == "1" {
+		conn.SetNoDelay(
+			1,
+			10,
+			2,
+			1,
+		)
+	}
 	// On the KCP connection we overlay an smux session and stream.
 	smuxConfig := smux.DefaultConfig()
 	smuxConfig.Version = 2

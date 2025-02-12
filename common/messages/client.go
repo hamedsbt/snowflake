@@ -5,10 +5,13 @@ package messages
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/bridgefingerprint"
 
+	"github.com/fxamacker/cbor"
+
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/bridgefingerprint"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/nat"
 )
 
@@ -148,4 +151,35 @@ func DecodeClientPollResponse(data []byte) (*ClientPollResponse, error) {
 	}
 
 	return &message, nil
+}
+
+// ClientConnectionMetadata is a struct that contains metadata about a snowflake connection between client and server
+// It will be sent from the client to the proxy in WebRTC data channel protocol string
+// The proxy will then send the metadata to the server in the protocol get parameter of the WebSocket connection
+type ClientConnectionMetadata struct {
+	ClientID []byte `json:"client_id"`
+}
+
+func (meta *ClientConnectionMetadata) EncodeConnectionMetadata() (string, error) {
+	jsonData, err := cbor.Marshal(meta, cbor.CanonicalEncOptions())
+	if err != nil {
+		return "", err
+	}
+
+	return base64.RawURLEncoding.EncodeToString(jsonData), nil
+}
+
+func DecodeConnectionMetadata(data string) (*ClientConnectionMetadata, error) {
+	decodedData, err := base64.RawURLEncoding.DecodeString(data)
+	if err != nil {
+		return nil, err
+	}
+
+	var meta ClientConnectionMetadata
+	err = cbor.Unmarshal(decodedData, &meta)
+	if err != nil {
+		return nil, err
+	}
+
+	return &meta, nil
 }

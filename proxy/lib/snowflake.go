@@ -35,6 +35,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -342,7 +343,7 @@ func (sf *SnowflakeProxy) datachannelHandler(conn *webRTCConn, remoteAddr net.Ad
 		relayURL = sf.RelayURL
 	}
 
-	wsConn, err := connectToRelay(relayURL, remoteAddr)
+	wsConn, err := connectToRelay(relayURL, remoteAddr, conn.GetConnectionProtocol())
 	if err != nil {
 		log.Print(err)
 		return
@@ -353,7 +354,11 @@ func (sf *SnowflakeProxy) datachannelHandler(conn *webRTCConn, remoteAddr net.Ad
 	log.Printf("datachannelHandler ends")
 }
 
-func connectToRelay(relayURL string, remoteAddr net.Addr) (*websocketconn.Conn, error) {
+func connectToRelay(
+	relayURL string,
+	remoteAddr net.Addr,
+	webrtcConnProtocol string,
+) (*websocketconn.Conn, error) {
 	u, err := url.Parse(relayURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid relay url: %s", err)
@@ -367,6 +372,12 @@ func connectToRelay(relayURL string, remoteAddr net.Addr) (*websocketconn.Conn, 
 		u.RawQuery = q.Encode()
 	} else {
 		log.Printf("no remote address given in websocket")
+	}
+
+	{
+		q := u.Query()
+		q.Set("protocol", webrtcConnProtocol)
+		u.RawQuery = q.Encode()
 	}
 
 	ws, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
@@ -449,7 +460,7 @@ func (sf *SnowflakeProxy) makePeerConnectionFromOffer(
 		close(dataChan)
 
 		pr, pw := io.Pipe()
-		conn := newWebRTCConn(pc, dc, pr, sf.bytesLogger)
+		conn := newWebRTCConn(pc, dc, pr, sf.bytesLogger, dc.Protocol())
 
 		dc.SetBufferedAmountLowThreshold(bufferedAmountLowThreshold)
 
@@ -461,7 +472,7 @@ func (sf *SnowflakeProxy) makePeerConnectionFromOffer(
 		})
 
 		dc.OnOpen(func() {
-			log.Printf("Data Channel %s-%d open\n", dc.Label(), dc.ID())
+			log.Printf("Data Channel %s-%d;%s open\n", dc.Label(), dc.ID(), dc.Protocol())
 			sf.EventDispatcher.OnNewSnowflakeEvent(event.EventOnProxyClientConnected{})
 
 			if sf.OutboundAddress != "" {
@@ -834,6 +845,11 @@ func (sf *SnowflakeProxy) Stop() {
 // it is considered "unrestricted". If timeout it is considered "restricted"
 func (sf *SnowflakeProxy) checkNATType(config webrtc.Configuration, probeURL string) error {
 	log.Printf("Checking our NAT type, contacting NAT check probe server at \"%v\"...", probeURL)
+
+	if os.Getenv("SNOWFLAKE_TEST_ASSUMEUNRESTRICTED") != "" {
+		currentNATType = NATUnrestricted
+		return nil
+	}
 
 	probe, err := newSignalingServer(probeURL)
 	if err != nil {

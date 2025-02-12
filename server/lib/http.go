@@ -1,13 +1,10 @@
 package snowflake_server
 
 import (
-	"bufio"
-	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -17,7 +14,8 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/encapsulation"
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/messages"
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/packetpadding"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/turbotunnel"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/websocketconn"
 )
@@ -32,7 +30,7 @@ const requestTimeout = 10 * time.Second
 const clientMapTimeout = 1 * time.Minute
 
 // How big to make the map of ClientIDs to IP addresses. The map is used in
-// turbotunnelMode to store a reasonable IP address for a client session that
+// turboTunnelUDPLikeMode to store a reasonable IP address for a client session that
 // may outlive any single WebSocket connection.
 const clientIDAddrMapCapacity = 98304
 
@@ -108,47 +106,25 @@ func (handler *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Pass the address of client as the remote address of incoming connection
 	clientIPParam := r.URL.Query().Get("client_ip")
 	addr := clientAddr(clientIPParam)
+	protocol := r.URL.Query().Get("protocol")
 
-	var token [len(turbotunnel.Token)]byte
-	_, err = io.ReadFull(conn, token[:])
-	if err != nil {
-		// Don't bother logging EOF: that happens with an unused
-		// connection, which clients make frequently as they maintain a
-		// pool of proxies.
-		if err != io.EOF {
-			log.Printf("reading token: %v", err)
-		}
-		return
-	}
-
-	switch {
-	case bytes.Equal(token[:], turbotunnel.Token[:]):
-		err = handler.turbotunnelMode(conn, addr)
-	default:
-		// We didn't find a matching token, which means that we are
-		// dealing with a client that doesn't know about such things.
-		// Close the conn as we no longer support the old
-		// one-session-per-WebSocket mode.
-		log.Println("Received unsupported oneshot connection")
-		return
-	}
-	if err != nil {
+	err = handler.turboTunnelUDPLikeMode(conn, addr, protocol)
+	if err != nil && err != io.EOF {
 		log.Println(err)
 		return
 	}
 }
 
-// turbotunnelMode handles clients that sent turbotunnel.Token at the start of
-// their stream. These clients expect to send and receive encapsulated packets,
-// with a long-lived session identified by ClientID.
-func (handler *httpHandler) turbotunnelMode(conn net.Conn, addr net.Addr) error {
-	// Read the ClientID prefix. Every packet encapsulated in this WebSocket
-	// connection pertains to the same ClientID.
-	var clientID turbotunnel.ClientID
-	_, err := io.ReadFull(conn, clientID[:])
+func (handler *httpHandler) turboTunnelUDPLikeMode(conn *websocketconn.Conn, addr net.Addr, protocol string) error {
+	// Read the ClientID from the WebRTC data channel protocol string. Every
+	// packet received on this WebSocket connection pertains to the same
+	// ClientID.
+	clientID := turbotunnel.ClientID{}
+	metaData, err := messages.DecodeConnectionMetadata(protocol)
 	if err != nil {
-		return fmt.Errorf("reading ClientID: %w", err)
+		return err
 	}
+	copy(clientID[:], metaData.ClientID[:])
 
 	// Store a short-term mapping from the ClientID to the client IP
 	// address attached to this WebSocket connection. tor will want us to
@@ -167,8 +143,10 @@ func (handler *httpHandler) turbotunnelMode(conn net.Conn, addr net.Addr) error 
 	wg.Add(2)
 	done := make(chan struct{})
 
-	// The remainder of the WebSocket stream consists of encapsulated
-	// packets. We read them one by one and feed them into the
+	connPaddable := packetpadding.NewPaddableConnection(conn, packetpadding.New())
+
+	// The remainder of the WebSocket stream consists of packets, one packet
+	// per WebSocket message. We read them one by one and feed them into the
 	// QueuePacketConn on which kcp.ServeConn was set up, which eventually
 	// leads to KCP-level sessions in the acceptSessions function.
 	go func() {
@@ -176,11 +154,9 @@ func (handler *httpHandler) turbotunnelMode(conn net.Conn, addr net.Addr) error 
 		defer close(done) // Signal the write loop to finish
 		var p [2048]byte
 		for {
-			n, err := encapsulation.ReadData(conn, p[:])
-			if err == io.ErrShortBuffer {
-				err = nil
-			}
+			n, err := connPaddable.Read(p[:])
 			if err != nil {
+				log.Println(err)
 				return
 			}
 			pconn.QueueIncoming(p[:n], clientID)
@@ -192,10 +168,6 @@ func (handler *httpHandler) turbotunnelMode(conn net.Conn, addr net.Addr) error 
 	go func() {
 		defer wg.Done()
 		defer conn.Close() // Signal the read loop to finish
-
-		// Buffer encapsulation.WriteData operations to keep length
-		// prefixes in the same send as the data that follows.
-		bw := bufio.NewWriter(conn)
 		for {
 			select {
 			case <-done:
@@ -204,12 +176,10 @@ func (handler *httpHandler) turbotunnelMode(conn net.Conn, addr net.Addr) error 
 				if !ok {
 					return
 				}
-				_, err := encapsulation.WriteData(bw, p)
+				_, err := connPaddable.Write(p)
 				pconn.Restore(p)
-				if err == nil {
-					err = bw.Flush()
-				}
 				if err != nil {
+					log.Println(err)
 					return
 				}
 			}

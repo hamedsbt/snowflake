@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/messages"
 	"io"
 	"log"
 	"net"
@@ -18,6 +19,7 @@ import (
 
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/event"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/proxy"
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/turbotunnel"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/util"
 )
 
@@ -43,34 +45,50 @@ type WebRTCPeer struct {
 	bytesLogger  bytesLogger
 	eventsLogger event.SnowflakeEventReceiver
 	proxy        *url.URL
+
+	clientID turbotunnel.ClientID
 }
 
 // Deprecated: Use NewWebRTCPeerWithNatPolicyAndEventsAndProxy Instead.
-func NewWebRTCPeer(
+func newWebRTCPeer(
 	config *webrtc.Configuration, broker *BrokerChannel,
 ) (*WebRTCPeer, error) {
-	return NewWebRTCPeerWithNatPolicyAndEventsAndProxy(
+	return newWebRTCPeerWithNatPolicyAndEventsAndProxy(
 		config, broker, nil, nil, nil,
 	)
 }
 
 // Deprecated: Use NewWebRTCPeerWithNatPolicyAndEventsAndProxy Instead.
-func NewWebRTCPeerWithEvents(
+func newWebRTCPeerWithEvents(
 	config *webrtc.Configuration, broker *BrokerChannel,
 	eventsLogger event.SnowflakeEventReceiver,
 ) (*WebRTCPeer, error) {
-	return NewWebRTCPeerWithNatPolicyAndEventsAndProxy(
+	return newWebRTCPeerWithNatPolicyAndEventsAndProxy(
 		config, broker, nil, eventsLogger, nil,
 	)
 }
 
 // Deprecated: Use NewWebRTCPeerWithNatPolicyAndEventsAndProxy Instead.
-func NewWebRTCPeerWithEventsAndProxy(
+func newWebRTCPeerWithEventsAndProxy(
 	config *webrtc.Configuration, broker *BrokerChannel,
 	eventsLogger event.SnowflakeEventReceiver, proxy *url.URL,
 ) (*WebRTCPeer, error) {
-	return NewWebRTCPeerWithNatPolicyAndEventsAndProxy(
+	return newWebRTCPeerWithNatPolicyAndEventsAndProxy(
 		config, broker, nil, eventsLogger, proxy,
+	)
+}
+
+func newWebRTCPeerWithNatPolicyAndEventsAndProxy(
+	config *webrtc.Configuration,
+	broker *BrokerChannel, natPolicy *NATPolicy, eventsLogger event.SnowflakeEventReceiver, proxy *url.URL,
+) (*WebRTCPeer, error) {
+	return NewWebRTCPeerWithNatPolicyAndEventsProxyAndClientID(
+		config,
+		broker,
+		natPolicy,
+		eventsLogger,
+		proxy,
+		turbotunnel.ClientID{},
 	)
 }
 
@@ -80,9 +98,10 @@ func NewWebRTCPeerWithEventsAndProxy(
 // The creation of the peer handles the signaling to the Snowflake broker, including
 // the exchange of SDP information, the creation of a PeerConnection, and the establishment
 // of a DataChannel to the Snowflake proxy.
-func NewWebRTCPeerWithNatPolicyAndEventsAndProxy(
-	config *webrtc.Configuration, broker *BrokerChannel, natPolicy *NATPolicy,
-	eventsLogger event.SnowflakeEventReceiver, proxy *url.URL,
+// clientID is the hinted ID for the connection.
+func NewWebRTCPeerWithNatPolicyAndEventsProxyAndClientID(config *webrtc.Configuration,
+	broker *BrokerChannel, natPolicy *NATPolicy, eventsLogger event.SnowflakeEventReceiver, proxy *url.URL,
+	clientID turbotunnel.ClientID,
 ) (*WebRTCPeer, error) {
 	if eventsLogger == nil {
 		eventsLogger = event.NewSnowflakeEventDispatcher()
@@ -106,6 +125,7 @@ func NewWebRTCPeerWithNatPolicyAndEventsAndProxy(
 
 	connection.eventsLogger = eventsLogger
 	connection.proxy = proxy
+	connection.clientID = clientID
 
 	err := connection.connect(config, broker, natPolicy)
 	if err != nil {
@@ -296,9 +316,18 @@ func (c *WebRTCPeer) preparePeerConnection(
 		log.Printf("NewPeerConnection ERROR: %s", err)
 		return err
 	}
-	ordered := true
+	ordered := false
+	var maxRetransmission uint16 = 0
+	connectionMetadata := messages.ClientConnectionMetadata{ClientID: c.clientID[:]}
+	encodedMetadata, err := connectionMetadata.EncodeConnectionMetadata()
+	if err != nil {
+		return err
+	}
+	protocol := encodedMetadata
 	dataChannelOptions := &webrtc.DataChannelInit{
-		Ordered: &ordered,
+		Ordered:        &ordered,
+		Protocol:       &protocol,
+		MaxRetransmits: &maxRetransmission,
 	}
 	// We must create the data channel before creating an offer
 	// https://github.com/pion/webrtc/wiki/Release-WebRTC@v3.0.0#a-data-channel-is-no-longer-implicitly-created-with-a-peerconnection
@@ -383,3 +412,5 @@ func (c *WebRTCPeer) cleanup() {
 		}
 	}
 }
+
+func (c *WebRTCPeer) MessageBoundaryPreserved() {}
