@@ -2,19 +2,15 @@ package snowflake_client
 
 import (
 	"errors"
-	"io"
 	"net"
 	"time"
-)
 
-type ReadWriteCloserPreservesBoundary interface {
-	io.ReadWriteCloser
-	MessageBoundaryPreserved()
-}
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/packetpadding"
+)
 
 var errENOSYS = errors.New("not implemented")
 
-func newPacketConnWrapper(localAddr, remoteAddr net.Addr, rwc ReadWriteCloserPreservesBoundary) net.PacketConn {
+func newPacketConnWrapper(localAddr, remoteAddr net.Addr, rwc packetpadding.ReadWriteCloserPreservesBoundary) net.PacketConn {
 	return &packetConnWrapper{
 		ReadWriteCloserPreservesBoundary: rwc,
 		remoteAddr:                       remoteAddr,
@@ -23,7 +19,7 @@ func newPacketConnWrapper(localAddr, remoteAddr net.Addr, rwc ReadWriteCloserPre
 }
 
 type packetConnWrapper struct {
-	ReadWriteCloserPreservesBoundary
+	packetpadding.ReadWriteCloserPreservesBoundary
 	remoteAddr net.Addr
 	localAddr  net.Addr
 }
