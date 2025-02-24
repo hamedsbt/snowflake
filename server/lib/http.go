@@ -2,6 +2,7 @@ package snowflake_server
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -131,6 +132,33 @@ func (handler *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // their stream. These clients expect to send and receive encapsulated packets,
 // with a long-lived session identified by ClientID.
 func (handler *httpHandler) turbotunnelMode(conn net.Conn, addr net.Addr) error {
+	{
+		var err error
+		var token [len(turbotunnel.Token)]byte
+		_, err = io.ReadFull(conn, token[:])
+		if err != nil {
+			// Don't bother logging EOF: that happens with an unused
+			// connection, which clients make frequently as they maintain a
+			// pool of proxies.
+			if err != io.EOF {
+				log.Printf("reading token: %v", err)
+			}
+			return nil
+		}
+
+		switch {
+		case bytes.Equal(token[:], turbotunnel.Token[:]):
+			break
+		default:
+			// We didn't find a matching token, which means that we are
+			// dealing with a client that doesn't know about such things.
+			// Close the conn as we no longer support the old
+			// one-session-per-WebSocket mode.
+			log.Println("Received unsupported oneshot connection")
+			return nil
+		}
+	}
+
 	// Read the ClientID prefix. Every packet encapsulated in this WebSocket
 	// connection pertains to the same ClientID.
 	var clientID turbotunnel.ClientID
