@@ -88,7 +88,7 @@ func newWebRTCPeerWithNatPolicyAndEventsAndProxy(
 		natPolicy,
 		eventsLogger,
 		proxy,
-		turbotunnel.ClientID{},
+		turbotunnel.NewClientID(),
 	)
 }
 
