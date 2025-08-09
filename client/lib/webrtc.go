@@ -398,12 +398,47 @@ func (c *WebRTCPeer) openMediaTrack() {
 		defer ticker.Stop()
 
 		for ; true; <-ticker.C {
-			bufSize := randomInt(1000, 2500)
+			// Add jitter to simulate "realistic" media patterns
+			jitterDelay := time.Duration(randomInt(0, 200)) * time.Millisecond
+			time.Sleep(jitterDelay)
+
+			// Vary packet sizes for specific frames types
+			var bufSize int
+			frameType := randomInt(1, 100)
+			switch {
+			case frameType <= 5: // I-frames: 5% chance, larger
+				bufSize = randomInt(8000, 15000)
+			case frameType <= 35: // P-frames: 30% chance, medium
+				bufSize = randomInt(2000, 5000)
+			default: // B-frames: 65% chance, smaller
+				bufSize = randomInt(500, 2000)
+			}
+
 			buf := make([]byte, bufSize)
 
-			err := videoTrack.WriteSample(media.Sample{Data: buf, Duration: time.Second})
+			// Add some timing variation
+			frameDuration := time.Duration(randomInt(900, 1100)) * time.Millisecond
+
+			err = videoTrack.WriteSample(media.Sample{Data: buf, Duration: frameDuration})
 			if err != nil {
 				log.Printf("webrtc.WriteSample ERROR: %s", err)
+			}
+
+			// Simulate some burst of smaller packets
+			if randomInt(1, 10) == 1 { // 10% chance
+				burstCount := randomInt(2, 5)
+				for i := 0; i < burstCount; i++ {
+					smallBuf := make([]byte, randomInt(100, 400))
+					time.Sleep(time.Duration(randomInt(10, 50)) * time.Millisecond)
+
+					frameDuration = time.Duration(randomInt(16, 33)) * time.Millisecond
+
+					err = videoTrack.WriteSample(media.Sample{Data: smallBuf, Duration: frameDuration})
+					if err != nil {
+						log.Printf("webrtc.WriteSample burst ERROR: %s", err)
+						break
+					}
+				}
 			}
 		}
 	}()
