@@ -1,9 +1,7 @@
 package snowflake_client
 
 import (
-	"crypto/rand"
 	"log"
-	"math/big"
 	"time"
 )
 
@@ -70,13 +68,4 @@ func (b *bytesSyncLogger) addOutbound(amount int64) {
 
 func (b *bytesSyncLogger) addInbound(amount int64) {
 	b.inboundChan <- amount
-}
-
-func randomInt(min, max int) int {
-	nBig, err := rand.Int(rand.Reader, big.NewInt(int64(max-min)))
-	if err != nil {
-		panic(err)
-	}
-
-	return int(nBig.Int64()) + min
 }

@@ -15,9 +15,9 @@ import (
 	"github.com/pion/transport/v3"
 	"github.com/pion/transport/v3/stdnet"
 	"github.com/pion/webrtc/v4"
-	"github.com/pion/webrtc/v4/pkg/media"
 
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/event"
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/media"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/proxy"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/util"
 )
@@ -44,6 +44,7 @@ type WebRTCPeer struct {
 	bytesLogger  bytesLogger
 	eventsLogger event.SnowflakeEventReceiver
 	proxy        *url.URL
+	mediaChannel *media.MediaChannel
 }
 
 // Deprecated: Use NewWebRTCPeerWithNatPolicyAndEventsAndProxy Instead.
@@ -107,6 +108,7 @@ func NewWebRTCPeerWithNatPolicyAndEventsAndProxy(
 
 	connection.eventsLogger = eventsLogger
 	connection.proxy = proxy
+	connection.mediaChannel = media.NewMediaChannel()
 
 	err := connection.connect(config, broker, natPolicy)
 	if err != nil {
@@ -342,7 +344,10 @@ func (c *WebRTCPeer) preparePeerConnection(
 	c.open = make(chan struct{})
 	log.Println("WebRTC: DataChannel created")
 
-	c.openMediaTrack()
+	err = c.mediaChannel.Start(c.pc)
+	if err != nil {
+		log.Printf("Failed to setup media channel: %v", err)
+	}
 
 	offer, err := c.pc.CreateOffer(nil)
 	// TODO: Potentially timeout and retry if ICE isn't working.
@@ -369,85 +374,12 @@ func (c *WebRTCPeer) preparePeerConnection(
 	return nil
 }
 
-func (c *WebRTCPeer) openMediaTrack() {
-	videoTrack, err := webrtc.NewTrackLocalStaticSample(
-		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeAV1}, "video", "pion",
-	)
-	if err != nil {
-		log.Printf("webrtc.NewTrackLocalStaticSample ERROR: %s", err)
-		return
-	}
-
-	rtpSender, err := c.pc.AddTrack(videoTrack)
-	if err != nil {
-		log.Printf("webrtc.AddTrack ERROR: %s", err)
-		return
-	}
-
-	go func() {
-		rtcpBuf := make([]byte, 1500)
-		for {
-			if _, _, rtcpErr := rtpSender.Read(rtcpBuf); rtcpErr != nil {
-				return
-			}
-		}
-	}()
-
-	go func() {
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-
-		for ; true; <-ticker.C {
-			// Add jitter to simulate "realistic" media patterns
-			jitterDelay := time.Duration(randomInt(0, 200)) * time.Millisecond
-			time.Sleep(jitterDelay)
-
-			// Vary packet sizes for specific frames types
-			var bufSize int
-			frameType := randomInt(1, 100)
-			switch {
-			case frameType <= 5: // I-frames: 5% chance, larger
-				bufSize = randomInt(8000, 15000)
-			case frameType <= 35: // P-frames: 30% chance, medium
-				bufSize = randomInt(2000, 5000)
-			default: // B-frames: 65% chance, smaller
-				bufSize = randomInt(500, 2000)
-			}
-
-			buf := make([]byte, bufSize)
-
-			// Add some timing variation
-			frameDuration := time.Duration(randomInt(900, 1100)) * time.Millisecond
-
-			err = videoTrack.WriteSample(media.Sample{Data: buf, Duration: frameDuration})
-			if err != nil {
-				log.Printf("webrtc.WriteSample ERROR: %s", err)
-			}
-
-			// Simulate some burst of smaller packets
-			if randomInt(1, 10) == 1 { // 10% chance
-				burstCount := randomInt(2, 5)
-				for i := 0; i < burstCount; i++ {
-					smallBuf := make([]byte, randomInt(100, 400))
-					time.Sleep(time.Duration(randomInt(10, 50)) * time.Millisecond)
-
-					frameDuration = time.Duration(randomInt(16, 33)) * time.Millisecond
-
-					err = videoTrack.WriteSample(media.Sample{Data: smallBuf, Duration: frameDuration})
-					if err != nil {
-						log.Printf("webrtc.WriteSample burst ERROR: %s", err)
-						break
-					}
-				}
-			}
-		}
-	}()
-
-	log.Println("WebRTC: Media track opened")
-}
-
 // cleanup closes all channels and transports
 func (c *WebRTCPeer) cleanup() {
+	// Stop media channel
+	if c.mediaChannel != nil {
+		c.mediaChannel.Stop()
+	}
 	// Close this side of the SOCKS pipe.
 	if c.writePipe != nil { // c.writePipe can be nil in tests.
 		c.writePipe.Close()
