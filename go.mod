@@ -21,8 +21,8 @@ require (
 	github.com/refraction-networking/utls v1.6.7
 	github.com/smartystreets/goconvey v1.8.1
 	github.com/stretchr/testify v1.11.1
+	github.com/theodorsm/covert-dtls v1.4.0
 	github.com/txthinking/socks5 v0.0.0-20251011041537-5c31f201a10e
-	github.com/theodorsm/covert-dtls v1.3.0
 	github.com/xtaci/kcp-go/v5 v5.6.24
 	github.com/xtaci/smux v1.5.35
 	gitlab.torproject.org/tpo/anti-censorship/geoip v0.0.0-20210928150955-7ce4b3d98d01

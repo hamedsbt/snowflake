@@ -5,7 +5,7 @@ to a server using Snowflake.
 Included in the package is a Transport type that implements the Pluggable Transports v2.1 Go API
 specification. To use Snowflake, you must first create a client from a configuration:
 
-	config := snowflake_client.C/lientConfig{
+	config := snowflake_client.ClientConfig{
 		BrokerURL:   "https://snowflake-broker.example.com",
 		FrontDomain: "https://friendlyfrontdomain.net",
 		// ...
