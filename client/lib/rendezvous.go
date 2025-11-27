@@ -19,6 +19,7 @@ import (
 
 	utlsutil "gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/ptutil/utls"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/certs"
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/covertdtls"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/event"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/messages"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/nat"
@@ -252,8 +253,9 @@ type WebRTCDialer struct {
 	webrtcConfig *webrtc.Configuration
 	max          int
 
-	eventLogger event.SnowflakeEventReceiver
-	proxy       *url.URL
+	eventLogger      event.SnowflakeEventReceiver
+	proxy            *url.URL
+	covertDTLSconfig *covertdtls.CovertDTLSConfig
 }
 
 // Deprecated: Use NewWebRTCDialerWithNatPolicyAndEventsAndProxy instead
@@ -293,6 +295,19 @@ func NewWebRTCDialerWithNatPolicyAndEventsAndProxy(
 	eventLogger event.SnowflakeEventReceiver,
 	proxy *url.URL,
 ) *WebRTCDialer {
+	return NewCovertWebRTCDialerWithNatPolicyAndEventsAndProxy(broker, natPolicy, iceServers, max, eventLogger, proxy, nil)
+}
+
+// NewCovertWebRTCDialerWithNatPolicyAndEventsAndProxy constructs a new WebRTCDialer setting DTLS mimicking and randomization.
+func NewCovertWebRTCDialerWithNatPolicyAndEventsAndProxy(
+	broker *BrokerChannel,
+	natPolicy *NATPolicy,
+	iceServers []webrtc.ICEServer,
+	max int,
+	eventLogger event.SnowflakeEventReceiver,
+	proxy *url.URL,
+	covertDTLSconfig *covertdtls.CovertDTLSConfig,
+) *WebRTCDialer {
 	config := webrtc.Configuration{
 		ICEServers: iceServers,
 	}
@@ -303,8 +318,9 @@ func NewWebRTCDialerWithNatPolicyAndEventsAndProxy(
 		webrtcConfig:  &config,
 		max:           max,
 
-		eventLogger: eventLogger,
-		proxy:       proxy,
+		eventLogger:      eventLogger,
+		proxy:            proxy,
+		covertDTLSconfig: covertDTLSconfig,
 	}
 }
 

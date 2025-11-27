@@ -125,6 +125,12 @@ func socksAcceptLoop(ln *pt.SocksListener, baseConfig sf.ClientConfig,
 			if arg, ok := conn.Req.Args.Get("fingerprint"); ok {
 				config.BridgeFingerprint = arg
 			}
+			if arg, ok := conn.Req.Args.Get("covertdtls-config"); ok {
+				config.CovertDTLSConfig = arg
+			}
+			if arg, ok := conn.Req.Args.Get("covertdtls-fingerprint"); ok {
+				config.CovertDTLSFingerprint = arg
+			}
 			transport, err := sf.NewSnowflakeClient(config)
 			if err != nil {
 				conn.Reject()
@@ -176,6 +182,8 @@ func main() {
 	max := flag.Int("max", DefaultSnowflakeCapacity,
 		"capacity for number of multiplexed WebRTC peers")
 	versionFlag := flag.Bool("version", false, "display version info to stderr and quit")
+	covertDTLSConfig := flag.String("covertdtls-config", "", "Configuration of DTLS mimicking and randomization: mimic, randomize, randomizemimic")
+	covertDTLSfingerprint := flag.String("covertdtls-fingerprint", "", "Mimicking of a raw DTLS fingerprint")
 
 	// Deprecated
 	oldLogToStateDir := flag.Bool("logToStateDir", false, "use -log-to-state-dir instead")
@@ -234,14 +242,16 @@ func main() {
 	}
 
 	config := sf.ClientConfig{
-		BrokerURL:          *brokerURL,
-		AmpCacheURL:        *ampCacheURL,
-		SQSQueueURL:        *sqsQueueURL,
-		SQSCredsStr:        *sqsCredsStr,
-		FrontDomains:       frontDomains,
-		ICEAddresses:       iceAddresses,
-		KeepLocalAddresses: *keepLocalAddresses || *oldKeepLocalAddresses,
-		Max:                *max,
+		BrokerURL:             *brokerURL,
+		AmpCacheURL:           *ampCacheURL,
+		SQSQueueURL:           *sqsQueueURL,
+		SQSCredsStr:           *sqsCredsStr,
+		FrontDomains:          frontDomains,
+		ICEAddresses:          iceAddresses,
+		KeepLocalAddresses:    *keepLocalAddresses || *oldKeepLocalAddresses,
+		Max:                   *max,
+		CovertDTLSConfig:      *covertDTLSConfig,
+		CovertDTLSFingerprint: *covertDTLSfingerprint,
 	}
 
 	// Begin goptlib client process.
