@@ -303,6 +303,11 @@ func (c *WebRTCPeer) preparePeerConnection(
 
 	s.SetNet(vnet)
 
+	// Ensure that checks below does not trigger nil pointer dereference
+	if covertDTLSConfig == nil {
+		covertDTLSConfig = &covertdtls.CovertDTLSConfig{}
+	}
+
 	if covertDTLSConfig.Fingerprint != "" {
 		mimic := &mimicry.MimickedClientHello{}
 		err := mimic.LoadFingerprint(covertDTLSConfig.Fingerprint)
