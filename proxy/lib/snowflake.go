@@ -41,12 +41,16 @@ import (
 	"time"
 
 	"github.com/pion/ice/v4"
+	"github.com/theodorsm/covert-dtls/pkg/mimicry"
+	"github.com/theodorsm/covert-dtls/pkg/randomize"
+	"github.com/theodorsm/covert-dtls/pkg/utils"
 
 	"github.com/gorilla/websocket"
 	"github.com/pion/transport/v3/stdnet"
 	"github.com/pion/webrtc/v4"
 
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/constants"
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/covertdtls"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/event"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/messages"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/namematcher"
@@ -173,6 +177,9 @@ type SnowflakeProxy struct {
 
 	// GeoIP will be used to detect the country of the clients if provided
 	GeoIP GeoIP
+
+	// CovertDTLSConfig is used for configuration for randomization or mimicking (Firefox/Chrome browser) of DTLS Client Hello messages. String can be "randomize", "mimic" or "randomizemimc"
+	CovertDTLSConfig covertdtls.CovertDTLSConfig
 
 	periodicProxyStats *periodicProxyStats
 	bytesLogger        bytesLogger
@@ -432,6 +439,33 @@ func (sf *SnowflakeProxy) makeWebRTCAPI() *webrtc.API {
 	settingsEngine.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
 
 	settingsEngine.SetDTLSInsecureSkipHelloVerify(true)
+
+	if sf.CovertDTLSConfig.Fingerprint != "" {
+		mimic := &mimicry.MimickedClientHello{}
+		err := mimic.LoadFingerprint(sf.CovertDTLSConfig.Fingerprint)
+		if err != nil {
+			log.Printf("NewPeerConnection ERROR: %s", err)
+			return nil
+		}
+		profiles := utils.DefaultSRTPProtectionProfiles()
+		settingsEngine.SetSRTPProtectionProfiles(profiles...)
+		settingsEngine.SetDTLSClientHelloMessageHook(mimic.Hook)
+	} else if sf.CovertDTLSConfig.Mimic {
+		mimic := &mimicry.MimickedClientHello{}
+		if sf.CovertDTLSConfig.Randomize {
+			err := mimic.LoadRandomFingerprint()
+			if err != nil {
+				log.Printf("makeWebRTCAPI ERROR: %s", err)
+				return nil
+			}
+		}
+		profiles := utils.DefaultSRTPProtectionProfiles()
+		settingsEngine.SetSRTPProtectionProfiles(profiles...)
+		settingsEngine.SetDTLSClientHelloMessageHook(mimic.Hook)
+	} else if sf.CovertDTLSConfig.Randomize {
+		rand := randomize.RandomizedMessageClientHello{RandomALPN: true}
+		settingsEngine.SetDTLSClientHelloMessageHook(rand.Hook)
+	}
 
 	return webrtc.NewAPI(webrtc.WithSettingEngine(settingsEngine))
 }

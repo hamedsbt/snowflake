@@ -37,9 +37,11 @@ import (
 
 	"github.com/pion/ice/v4"
 	"github.com/pion/webrtc/v4"
+	"github.com/theodorsm/covert-dtls/pkg/fingerprints"
 	"github.com/xtaci/kcp-go/v5"
 	"github.com/xtaci/smux"
 
+	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/covertdtls"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/event"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/nat"
 	"gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/v2/common/turbotunnel"
@@ -118,6 +120,12 @@ type ClientConfig struct {
 	BridgeFingerprint string
 	// CommunicationProxy is the proxy address for network communication
 	CommunicationProxy *url.URL
+	// CovertDTLSConfig is the configuration for randomization or mimicking (Firefox/Chrome browser) of DTLS Client Hello messages.
+	// String can be "randomize", "mimic" or "randomizemimc"
+	CovertDTLSConfig string
+	// CovertDTLSFingerprint is the configuration for mimicking of DTLS 1.2 Client Hello messages.
+	// String should be a hexstring representation of client hello message bytes, the first byte should correspond to the DTLS version in a handshake message.
+	CovertDTLSFingerprint string
 }
 
 // NewSnowflakeClient creates a new Snowflake transport client that can spawn multiple
@@ -163,7 +171,17 @@ func NewSnowflakeClient(config ClientConfig) (*Transport, error) {
 		max = config.Max
 	}
 	eventsLogger := event.NewSnowflakeEventDispatcher()
-	transport := &Transport{dialer: NewWebRTCDialerWithNatPolicyAndEventsAndProxy(broker, natPolicy, iceServers, max, eventsLogger, config.CommunicationProxy), eventDispatcher: eventsLogger}
+
+	var covertDTLSConfig covertdtls.CovertDTLSConfig
+
+	if config.CovertDTLSConfig != "" {
+		covertDTLSConfig = covertdtls.ParseConfigString(config.CovertDTLSConfig)
+		if config.CovertDTLSFingerprint != "" {
+			covertDTLSConfig.Fingerprint = fingerprints.ClientHelloFingerprint(config.CovertDTLSFingerprint)
+		}
+	}
+
+	transport := &Transport{dialer: NewCovertWebRTCDialerWithNatPolicyAndEventsAndProxy(broker, natPolicy, iceServers, max, eventsLogger, config.CommunicationProxy, &covertDTLSConfig), eventDispatcher: eventsLogger}
 
 	return transport, nil
 }
