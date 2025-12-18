@@ -6,6 +6,9 @@ stages:
   - deploy
   - container-build
   - container-mirror
+  - binary_build
+  - release
+  - release_upload_binary
 
 variables:
   DEBIAN_FRONTEND: noninteractive
@@ -406,3 +409,55 @@ mirror-image-to-dockerhub:
   script:
     - echo "$DOCKERHUB_PASSWORD" | crane auth login docker.io -u $DOCKERHUB_MIRROR_USERNAME --password-stdin
     - crane cp -a containers.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake $DOCKERHUB_MIRROR_REPOURL
+
+binary_build_step:
+  stage: binary_build
+  image: ${DOCKER_REGISTRY_URL}/golang:1.24-$DEBIAN_STABLE
+  script:
+    - mkdir dist/
+    - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -buildid=" -o dist/client_linux_amd64 ./client
+    - CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w -buildid=" -o dist/client_linux_arm64 ./client
+    - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -buildid=" -o dist/proxy_linux_amd64 ./proxy
+    - CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w -buildid=" -o dist/proxy_linux_arm64 ./proxy
+  artifacts:
+    name: "${CI_PROJECT_PATH}_${CI_JOB_STAGE}_${CI_JOB_ID}_${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHA}"
+    paths:
+      - dist/
+    expire_in: 1 week
+
+release_job:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  allow_failure: true
+  rules:
+    - if: "$CI_COMMIT_TAG"
+    - when: never
+  artifacts:
+    name: "${CI_PROJECT_PATH}_${CI_JOB_STAGE}_${CI_JOB_ID}_${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHA}"
+    paths:
+      - dist/
+    expire_in: 1 week
+  script:
+    - echo "Generating a release"
+  release:
+    tag_name: '$CI_COMMIT_TAG'
+    description: '$CI_COMMIT_TAG'
+
+release_upload_binary_job:
+  stage: release_upload_binary
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  rules:
+    - if: "$CI_COMMIT_TAG"
+    - when: never
+  artifacts:
+    name: "${CI_PROJECT_PATH}_${CI_JOB_STAGE}_${CI_JOB_ID}_${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHA}"
+    paths:
+      - dist/
+    expire_in: 1 week
+  script:
+    - echo "Uploading everything"
+    - glab auth login --hostname "$CI_SERVER_HOST" --job-token "$CI_JOB_TOKEN"
+    - glab release upload --use-package-registry "$CI_COMMIT_TAG" dist/client_linux_amd64
+    - glab release upload --use-package-registry "$CI_COMMIT_TAG" dist/client_linux_arm64
+    - glab release upload --use-package-registry "$CI_COMMIT_TAG" dist/proxy_linux_amd64
+    - glab release upload --use-package-registry "$CI_COMMIT_TAG" dist/proxy_linux_arm64
