@@ -13,8 +13,8 @@ require (
 	github.com/miekg/dns v1.1.65
 	github.com/pion/ice/v4 v4.0.10
 	github.com/pion/sdp/v3 v3.0.16
-	github.com/pion/stun/v3 v3.0.0
-	github.com/pion/transport/v3 v3.0.7
+	github.com/pion/stun/v3 v3.1.0
+	github.com/pion/transport/v3 v3.1.1
 	github.com/pion/webrtc/v4 v4.1.4
 	github.com/prometheus/client_golang v1.22.0
 	github.com/realclientip/realclientip-go v1.0.0
@@ -58,7 +58,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pion/datachannel v1.5.10 // indirect
-	github.com/pion/dtls/v3 v3.0.7 // indirect
+	github.com/pion/dtls/v3 v3.0.9 // indirect
 	github.com/pion/interceptor v0.1.40 // indirect
 	github.com/pion/logging v0.2.4 // indirect
 	github.com/pion/mdns/v2 v2.0.7 // indirect
