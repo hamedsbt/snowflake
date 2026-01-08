@@ -1,4 +1,4 @@
-name: Snowflake Client for Android armv7
+name: Snowflake Client for Android
 
 on:
   workflow_dispatch:
